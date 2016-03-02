@@ -1,0 +1,31 @@
+os.loadAPI("internet")
+
+if false == internet.register() then
+	print("Failed to initialize internet")
+	return
+end
+
+arg = { ... }
+
+if 0 == #arg then
+	local t = internet.named_local_nodes()
+
+	print("Local internet nodes:")
+
+	for k, v in pairs(t) do
+		if tostring(os.getComputerID()) ~= k then
+			print(k .. ": " .. v)
+		end
+	end
+else
+	print("Searching for " .. arg[1])
+	local id = internet.find_local(arg[1])
+	if nil == id then
+		print("Not found.")
+	else
+		print("Found, ID: " .. tostring(id))
+	end
+end
+
+internet.unregister()
+

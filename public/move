@@ -1,0 +1,311 @@
+local SOUTH	= 0
+local WEST	= 1
+local NORTH	= 2
+local EAST	= 3
+local wt	= {}	-- world table
+local at	= wt	-- active table
+local _fuel_items = { "minecraft:coal", "IC2:item.itemScrap", "Railcraft:fuel.coke", "Forestry:peat", "minecraft:lava_bucket" }
+
+function _w_forward()
+	return turtle.forward()
+end
+
+function _w_turn_right()
+	return turtle.turnRight()
+end
+
+function _w_turn_left()
+	return turtle.turnLeft()
+end
+
+function _w_up()
+	return turtle.up()
+end
+
+function _w_down()
+	return turtle.down()
+end
+
+function _forward()
+
+	if not at.forward() then
+		return false
+	end
+
+	if SOUTH == at.dir then
+		at.z = at.z + 1
+	elseif NORTH == at.dir then
+		at.z = at.z - 1
+	elseif EAST == at.dir then
+		at.x = at.x + 1
+	elseif WEST == at.dir then
+		at.x = at.x - 1
+	end
+	at.save_pos()
+	return true
+end
+
+function _turn_left()
+	if not at.turn_left() then
+		return false
+	end
+	if SOUTH == at.dir then
+		at.dir = EAST
+	elseif EAST == at.dir then
+		at.dir = NORTH
+	elseif NORTH == at.dir then
+		at.dir = WEST
+	elseif WEST == at.dir then
+		at.dir = SOUTH
+	end
+	at.save_pos()
+	return true
+end
+
+function _turn_right()
+	if not at.turn_right() then
+		return false
+	end
+	if SOUTH == at.dir then
+		at.dir = WEST
+	elseif WEST == at.dir then
+		at.dir = NORTH
+	elseif NORTH == at.dir then
+		at.dir = EAST
+	elseif EAST == at.dir then
+		at.dir = SOUTH
+	end
+	at.save_pos()
+	return true
+end
+
+function _up()
+	if not at.up() then
+		return false
+	end
+	at.y = at.y + 1
+	at.save_pos()
+	return true
+end
+
+function _down()
+	if not at.down() then
+		return false
+	end
+	at.y = at.y - 1
+	at.save_pos()
+	return true
+end
+
+function _w_save_pos()
+	local fp = fs.open(".position", "w")
+	if nil == fp then
+		return false
+	end
+	fp.writeLine(tostring(wt.x))
+	fp.writeLine(tostring(wt.y))
+	fp.writeLine(tostring(wt.z))
+	fp.writeLine(tostring(wt.dir))
+	fp.close()
+	return true
+end
+
+function _load_pos_file(fp)
+	wt.x = tonumber(fp.readLine())
+	wt.y = tonumber(fp.readLine())
+	wt.z = tonumber(fp.readLine())
+	wt.dir = tonumber(fp.readLine())
+end
+
+function _load_pos(filename)
+	local fp = fs.open(filename, "r")
+	if not fp then
+		return false
+	end
+	_load_pos_file(fp)
+	fp.close()
+	return true
+end
+
+function _out_of_fuel()
+	return (turtle.getFuelLevel() ~= "unlimited") and (turtle.getFuelLevel() < 1)
+end
+
+function _refuel()
+	local success = false
+	if not _out_of_fuel() then
+		return true
+	end
+	local old = turtle.getSelectedSlot()
+	for i=1, 16 do
+		turtle.select(i)
+		if turtle.refuel() and turtle.getFuelLevel() > 0 then
+			success = true
+			break
+		end
+	end
+	turtle.select(old)
+	return success
+end
+
+function _force_refuel()
+	while not _refuel() do
+		print("Help! I need gas")
+		os.sleep(3)
+	end
+end
+
+function _try_move(movement, action)
+	if not _refuel() then
+		return false
+	end
+	if action then
+		action()
+	end
+	return movement()
+end
+
+function _force_move(movement, action)
+	while not _try_move(movement, action) do
+		if not _refuel() then
+			_blocking_refuel()
+		else
+			print("Help! Im blocked")
+			os.sleep(2)
+		end
+	end
+end
+
+function _goto_forward(key, to)
+	while at[key] ~= to do
+		if not _try_move(_forward, action) then
+			if not _try_move(_up, action) then
+				print("Help, Im blocked (goto " .. key .. ")!")
+				os.sleep(2)
+			end
+		end
+	end
+end
+
+function _goto_x(dx, action)
+	if at.x == dx then
+		return
+	end
+	if at.x < dx then
+		face(EAST)
+	else
+		face(WEST)
+	end
+	_goto_forward('x', dx)
+end
+
+function _goto_z(dz, action)
+	if at.z == dz then
+		return
+	end
+	if at.z < dz then
+		face(SOUTH)
+	else
+		face(NORTH)
+	end
+	_goto_forward('z', dz)
+end
+
+function _goto_y(dy, action)
+	while at.y ~= dy do
+		if at.y < dy then
+			_force_move(_up, action)
+		else
+			_force_move(_down, action)
+		end
+	end
+end
+
+function goto(x, y, z, dir, action)
+	_goto_x(x, action)
+	_goto_z(z, action)
+	_goto_y(y, action)
+	turn(dir)
+end
+
+function turn_around()
+	_force_move(_turn_right, nil)
+	_force_move(_turn_right, nil)
+end
+
+function turn_right()
+	_force_move(_turn_right, nil)
+end
+
+function turn_left()
+	_force_move(_turn_left, nil)
+end
+
+function forward()
+	_force_move(_forward, nil)
+end
+
+function face(d)
+	if d == dir then
+		return
+	end
+	if NORTH == dir then
+		if SOUTH == d then
+			turn_around()
+		elseif WEST == d then
+			turn_left()
+		elseif EAST == d then
+			turn_right()
+		end
+	elseif SOUTH == dir then
+		if NORTH == d then
+			turn_around()
+		elseif WEST == d then
+			turn_right()
+		elseif EAST == d then
+			turn_left()
+		end
+	elseif WEST == dir then
+		if EAST == d then
+			turn_around()
+		elseif NORTH == d then
+			turn_right()
+		elseif SOUTH == d then
+			turn_left()
+		end
+	elseif EAST == direction then
+		if WEST == d then
+			turn_around()
+		elseif NORTH == d then
+			turn_left()
+		elseif SOUTH == d then
+			turn_right()
+		end
+	end
+end
+
+
+function initialize()
+	if false == _load_pos("disk/.position") then
+		if false == _load_pos_file(".position") then
+			return false
+		end
+	end
+
+	at = wt
+
+	print("Pos: " .. tostring(at.x) .. "," .. tostring(at.y) .. "," .. tostring(at.z) .. ":" .. tostring(at.dir))
+
+	wt["forward"]		= _w_forward
+	wt["turn_right"]	= _w_turn_right
+	wt["turn_left"]		= _w_turn_left
+	wt["up"]			= _w_up
+	wt["down"]			= _w_down
+	wt["save_pos"]		= _w_save_pos
+
+	wt.save_pos()
+	return true
+end
+
+
+

@@ -1,0 +1,19 @@
+os.loadAPI("internet")
+
+if false == internet.register() then
+	print("Failed to initialize internet")
+	return
+end
+
+print("Computer id: " .. tostring(os.getComputerID()))
+
+while true do
+	local from, data = internet.receive(nil)
+	if nil ~= data then
+		print("From " .. from .. " to me:")
+		print(data)
+	end
+end
+
+internet.unregister()
+

@@ -1,0 +1,196 @@
+local device_name = ""
+local nodes = {}
+local node_update = 0.0
+local seen_seq = {}
+local next_seq = 0
+
+function _get_id()
+	return tostring(os.getComputerID())
+end
+
+function _tokenize(inp, delimiter)
+	local t = {}
+	local i = 1
+	if delimiter == nil then
+		return t
+	end
+	local match = "([^" .. delimiter .. "]+)"
+	for str in string.gmatch(inp, match) do
+		t[i] = str
+		i = i + 1
+	end
+	return t
+end
+
+function _register_node(id, name)
+	nodes[tostring(id)] = name
+end
+
+function force_update_nodes()
+	rednet.broadcast("?|" .. device_name, "internet")
+	node_update = os.clock() + 15
+end
+
+function update_nodes()
+	if node_update < os.clock() then
+		force_update_nodes()
+	end
+end
+
+function sync_nodes()
+	local done = os.clock() + 3
+	force_update_nodes()
+	while os.clock() < done do
+		receive(1)
+	end
+end
+
+function register(name)
+	device_name = name
+	if nil == device_name then
+		device_name = _get_id()
+	end
+
+	local sides = { "top" , "bottom" , "front" , "left" , "right" , "back" }
+	local modems = {}
+
+	for i=1, #sides do
+		if peripheral.isPresent(sides[i]) and peripheral.getType(sides[i]) == "modem" then
+			rednet.open(sides[i])
+			rednet.host("internet", device_name)
+			sync_nodes()
+			return true
+		end
+	end
+	print("No modem found!")
+	return false
+end
+
+function unregister()
+	rednet.unhost("internet", device_name)
+end
+
+function local_nodes()
+	local ret = {}
+	for k, v in pairs(nodes) do
+		table.insert(ret, k)
+	end
+	return ret
+end
+
+function named_local_nodes()
+	return nodes
+end
+
+function find_local(name)
+	for k, v in pairs(nodes) do
+		if v == name then
+			return k
+		end
+	end
+	return nil
+end
+
+function _inner_send(to, passed, seq, message)
+	local knows_target = find_local(to)
+	local cid = _get_id()
+
+	if knows_target then
+		rednet.send(tonumber(knows_target), to .. ',' .. passed[1] .. ':' .. seq .. '|' .. message, "internet")
+		return true
+	end
+
+	local all = local_nodes()
+	local raw = tostring(to) .. ','
+	local send_to = {}
+
+	for i=1, #all do
+		local in_passed = false
+		for j=1, #passed do
+			if all[i] == passed[j] then
+				in_passed = true
+				break
+			end
+		end
+		if not in_passed then
+			table.insert(passed, all[i])
+			if all[i] ~= cid then
+				table.insert(send_to, all[i])
+			end
+		end
+	end
+
+	if 0 == #send_to then
+		return
+	end
+
+	for i=1, #passed do
+		raw = raw .. tostring(passed[i]) .. ','
+	end
+	raw = raw .. ':' .. seq .. '|' .. message
+	for i=1, #send_to do
+		rednet.send(tonumber(send_to[i]), raw, "internet")
+	end
+end
+
+function has_seen_before(from, seq)
+	if seq == seen_seq[from] then
+		return true
+	end
+	seen_seq[from] = seq
+	return false
+end
+
+function receive(timeout)
+	local cid = _get_id()
+	update_nodes()
+
+	local sender, message, protocol = rednet.receive("internet", timeout)
+	if nil == sender then
+		return nil
+	end
+
+	local header, payload = message:match("([^|]+)|(.*)")
+
+	if '?' == header then
+		_register_node(sender, payload)
+		rednet.send(sender, "!|" .. cid, "internet")
+		return nil
+	elseif '!' == header then
+		_register_node(sender, payload)
+		return nil
+	end
+
+	local header, seq = header:match("([^:]+):(.*)")
+
+	passed = _tokenize(header, ',')
+
+	local to = passed[1]
+	local from = passed[2]
+
+	if has_seen_before(from, seq) then
+		return nil
+	end
+
+	if to == cid then
+		return from, payload
+	end
+
+	table.remove(passed, 1)
+	_inner_send(to, passed, seq, payload)
+
+	if '*' ~= to then
+		return nil
+	end
+
+	return from, payload
+end
+
+function send(to, message)
+	update_nodes()
+	_inner_send(tostring(to), { _get_id() }, tostring(next_seq), message)
+	next_seq = next_seq + 1
+end
+
+--internet_register(get_device_name())
+

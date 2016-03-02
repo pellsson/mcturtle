@@ -1,0 +1,14 @@
+local server = 'http://127.0.0.1:3000/'
+local reply = http.get(server .. 'files')
+
+while true do
+	local package = reply.readLine()
+	if nil == package then
+		break
+	end
+	local f = http.get(server .. package)
+	local h = fs.open(package, "w")
+	h.write(f.readAll())
+	h.close()
+end
+
