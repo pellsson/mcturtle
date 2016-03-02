@@ -139,7 +139,7 @@ function _refuel()
 	local old = turtle.getSelectedSlot()
 	for i=1, 16 do
 		turtle.select(i)
-		if turtle.refuel() and turtle.getFuelLevel() > 0 then
+		if turtle.refuel(1) and turtle.getFuelLevel() > 0 then
 			success = true
 			break
 		end
@@ -167,8 +167,8 @@ end
 
 function _force_move(movement, action)
 	while not _try_move(movement, action) do
-		if not _refuel() then
-			_blocking_refuel()
+		if _out_of_fuel() then
+			_force_refuel()
 		else
 			print("Help! Im blocked")
 			os.sleep(2)
@@ -177,12 +177,35 @@ function _force_move(movement, action)
 end
 
 function _goto_forward(key, to)
+	local y = 0
 	while at[key] ~= to do
 		if not _try_move(_forward, action) then
-			if not _try_move(_up, action) then
-				print("Help, Im blocked (goto " .. key .. ")!")
-				os.sleep(2)
+			if _out_of_fuel() then
+				_force_refuel()
+			else
+				if 0 == y then
+					if _try_move(_up, action) then
+						y = 1
+					elseif _try_move(_down, action) then
+						y = -1
+					else
+						print("Help, Im blocked (goto " .. key .. ")!")
+						os.sleep(2)
+					end
+				elseif y > 0 then
+					if _try_move(_up, action) then
+						print("Help, Im blocked (goto " .. key .. ")!")
+						os.sleep(2)
+					end
+				else
+					if _try_move(_down, action) then
+						print("Help, Im blocked (goto " .. key .. ")!")
+						os.sleep(2)
+					end
+				end
 			end
+		else
+			y = 0
 		end
 	end
 end
@@ -191,6 +214,7 @@ function _goto_x(dx, action)
 	if at.x == dx then
 		return
 	end
+	print(tostring(at.x) .. " vs " .. tostring(dx))
 	if at.x < dx then
 		face(EAST)
 	else
@@ -225,7 +249,7 @@ function goto(x, y, z, dir, action)
 	_goto_x(x, action)
 	_goto_z(z, action)
 	_goto_y(y, action)
-	turn(dir)
+	face(dir)
 end
 
 function turn_around()
@@ -246,10 +270,10 @@ function forward()
 end
 
 function face(d)
-	if d == dir then
+	if d == at.dir then
 		return
 	end
-	if NORTH == dir then
+	if NORTH == at.dir then
 		if SOUTH == d then
 			turn_around()
 		elseif WEST == d then
@@ -257,7 +281,7 @@ function face(d)
 		elseif EAST == d then
 			turn_right()
 		end
-	elseif SOUTH == dir then
+	elseif SOUTH == at.dir then
 		if NORTH == d then
 			turn_around()
 		elseif WEST == d then
@@ -265,7 +289,7 @@ function face(d)
 		elseif EAST == d then
 			turn_left()
 		end
-	elseif WEST == dir then
+	elseif WEST == at.dir then
 		if EAST == d then
 			turn_around()
 		elseif NORTH == d then
@@ -273,7 +297,7 @@ function face(d)
 		elseif SOUTH == d then
 			turn_left()
 		end
-	elseif EAST == direction then
+	elseif EAST == at.dir then
 		if WEST == d then
 			turn_around()
 		elseif NORTH == d then
@@ -284,17 +308,20 @@ function face(d)
 	end
 end
 
+function dump_pos()
+	print("Pos: " .. tostring(at.x) .. "," .. tostring(at.y) .. "," .. tostring(at.z) .. ":" .. tostring(at.dir))
+end
 
 function initialize()
 	if false == _load_pos("disk/.position") then
-		if false == _load_pos_file(".position") then
+		if false == _load_pos(".position") then
 			return false
 		end
 	end
 
 	at = wt
 
-	print("Pos: " .. tostring(at.x) .. "," .. tostring(at.y) .. "," .. tostring(at.z) .. ":" .. tostring(at.dir))
+	dump_pos()
 
 	wt["forward"]		= _w_forward
 	wt["turn_right"]	= _w_turn_right

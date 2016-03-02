@@ -1,7 +1,10 @@
 os.loadAPI("internet")
 os.loadAPI("move")
+os.loadAPI("move")
 
 -- move.initialize()
 -- move._refuel()
 move.initialize()
-move.goto(256, 5, 176, 3)
+move.goto(256, 5, 178, 3)
+move.dump_pos()
+

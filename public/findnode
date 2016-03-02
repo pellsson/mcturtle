@@ -1,6 +1,6 @@
 os.loadAPI("internet")
 
-if false == internet.register() then
+if false == internet.connect() then
 	print("Failed to initialize internet")
 	return
 end
@@ -27,5 +27,5 @@ else
 	end
 end
 
-internet.unregister()
+internet.disconnect()
 

@@ -1,3 +1,5 @@
+os.loadAPI("utils")
+
 local device_name = ""
 local nodes = {}
 local node_update = 0.0
@@ -6,20 +8,6 @@ local next_seq = 0
 
 function _get_id()
 	return tostring(os.getComputerID())
-end
-
-function _tokenize(inp, delimiter)
-	local t = {}
-	local i = 1
-	if delimiter == nil then
-		return t
-	end
-	local match = "([^" .. delimiter .. "]+)"
-	for str in string.gmatch(inp, match) do
-		t[i] = str
-		i = i + 1
-	end
-	return t
 end
 
 function _register_node(id, name)
@@ -45,7 +33,7 @@ function sync_nodes()
 	end
 end
 
-function register(name)
+function connect(name)
 	device_name = name
 	if nil == device_name then
 		device_name = _get_id()
@@ -66,7 +54,7 @@ function register(name)
 	return false
 end
 
-function unregister()
+function disconnect()
 	rednet.unhost("internet", device_name)
 end
 
@@ -163,7 +151,7 @@ function receive(timeout)
 
 	local header, seq = header:match("([^:]+):(.*)")
 
-	passed = _tokenize(header, ',')
+	passed = utils.tokenize(header, ',')
 
 	local to = passed[1]
 	local from = passed[2]
