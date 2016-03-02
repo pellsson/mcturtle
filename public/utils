@@ -1,0 +1,13 @@
+function tokenize(inp, delimiter)
+	local t = {}
+	local i = 1
+	if delimiter == nil then
+		return t
+	end
+	local match = "([^" .. delimiter .. "]+)"
+	for str in string.gmatch(inp, match) do
+		t[i] = str
+		i = i + 1
+	end
+	return t
+end
