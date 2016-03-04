@@ -1,0 +1,22 @@
+os.loadAPI("global")
+
+args = { ... }
+
+if #args < 1 then
+	print("Usage: settask <task> [arguments]")
+	return
+end
+
+if not fs.exists(args[1]) then
+	print('No such task: ' .. args[1])
+	return
+end
+
+if not utils.set_task(table.concat(args, ' ')) then
+	print("Failed to set task.")
+else
+	print("Task successfully installed.")
+	print("Rebooting in 1 second...")
+	os.sleep(1)
+	os.reboot()
+end

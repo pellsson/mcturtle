@@ -1,5 +1,4 @@
-os.loadAPI("internet")
-os.loadAPI("utils")
+os.loadAPI("global")
 
 args = { ... }
 
@@ -8,13 +7,19 @@ if 0 == #args then
 	return
 end
 
+move.initialize()
 internet.connect()
+
 print("Sending ping...")
 local replies = internet.send_ping(args[1], args[2])
 
-print("Replies:")
+print('Got #' .. tostring(#replies) .. ':')
 for i=1, #replies do
-	print(replies[i].name .. " (" .. tostring(replies[i].ticks) .. ") ticks")
+	local entry = tostring(replies[i].id) .. ': ' .. replies[i].name
+	entry = entry .. ' (' .. tostring(replies[i].x) .. ',' .. tostring(replies[i].y)
+	entry = entry .. ',' .. tostring(replies[i].z) .. ' ' .. tostring(replies[i].dir) .. ') '
+	entry = entry ..'[' .. replies[i].task .. '] ' .. tostring(replies[i].ticks) .. ' ticks'
+	print(entry)
 end
 
 

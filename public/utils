@@ -22,3 +22,35 @@ end
 function current_ticks()
 	return (os.time() * 1000 + 18000) % 24000
 end
+
+function set_task(t)
+	local fp = fs.open('.task', 'w')
+
+	if fp then
+		fp.writeLine(tostring(t))
+		fp.close()
+	end
+	return (nil ~= fp)
+end
+
+function get_task()
+	local fp = fs.open('.task', 'r')
+	local p = 'none'
+	if fp then
+		 local line = fp.readLine()
+		 if line and #line then
+		 	p = line
+		 end
+		 fp.close()
+	end
+	return p
+end
+
+function get_task_array()
+	return tokenize(get_task(), ' ')
+end
+
+function get_task_name()
+	return get_task_array()[1]
+end
+

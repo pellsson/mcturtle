@@ -1,4 +1,4 @@
-os.loadAPI("internet")
+os.loadAPI("global")
 
 if false == internet.connect() then
 	print("Failed to initialize internet")
@@ -8,7 +8,7 @@ end
 arg = { ... }
 
 if 0 == #arg then
-	local t = internet.named_local_nodes()
+	local t = internet.local_nodes()
 
 	print("Local internet nodes:")
 
@@ -19,7 +19,7 @@ if 0 == #arg then
 	end
 else
 	print("Searching for " .. arg[1])
-	local id = internet.find_local(arg[1])
+	local id = internet.find_local_by_name(arg[1])
 	if nil == id then
 		print("Not found.")
 	else

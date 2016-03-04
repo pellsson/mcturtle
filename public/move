@@ -1,5 +1,3 @@
-os.loadAPI("utils")
-
 SOUTH	= 0
 WEST	= 1
 NORTH	= 2
@@ -7,6 +5,10 @@ EAST	= 3
 local wt	= {}	-- world table
 local at	= wt	-- active table
 local _fuel_items = { "minecraft:coal", "IC2:item.itemScrap", "Railcraft:fuel.coke", "Forestry:peat", "minecraft:lava_bucket" }
+
+function _nothing()
+	return true
+end
 
 function _w_fatal(s)
 	while true do
@@ -440,15 +442,13 @@ function dump_pos()
 end
 
 function initialize()
-	if false == _load_pos("disk/.position") then
-		if false == _load_pos(".position") then
+	if false == _load_pos(".position") then
+		if false == _load_pos("disk/.position") then
 			return false
 		end
 	end
 
 	at = wt
-
-	dump_pos()
 
 	wt["forward"]		= _w_forward
 	wt["turn_right"]	= _w_turn_right
@@ -461,7 +461,25 @@ function initialize()
 	wt["on_fatal"]		= _w_fatal
 	wt["save_pos"]		= _w_save_pos
 
-	wt.save_pos()
+	if not turtle then
+		print("Warning, machine can't move")
+		wt.x = 0
+		wt.y = 0
+		wt.z = 0
+		wt.dir = 0
+		wt["forward"]		= _nothing
+		wt["turn_right"]	= _nothing
+		wt["turn_left"]		= _nothing
+		wt["up"]			= _nothing
+		wt["down"]			= _nothing
+		wt["on_no_fuel"]	= _nothing
+		wt["on_blocked"]	= _nothing
+		wt["on_pre_move"]	= _nothing
+		wt["on_fatal"]		= _nothing
+		wt["save_pos"]		= _nothing
+	else
+		wt.save_pos()
+	end
 	return true
 end
 

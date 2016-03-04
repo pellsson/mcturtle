@@ -12,3 +12,29 @@ while true do
 	h.close()
 end
 
+if not fs.exists('/.position') and fs.exists('/disk/.position') then
+	fs.copy('/disk/.position', '/.position')
+end
+
+os.loadAPI("utils")
+
+local task_name = utils.get_task_name()
+
+if 'none' ~= task_name then
+	print("Task [" .. task_name .. "]...")
+	print("Press any key to abort (waiting 1 seconds)...")
+
+	local timeout_timer = os.startTimer(1)
+	while true do
+  		local event, obj = os.pullEvent()
+		if event == "timer" and obj == timeout_timer then
+			print("Launching task [" .. task_name .. "]...")
+			shell.run(utils.get_task())
+		    break
+		elseif event == "key" then
+			print("Aborted task [" .. task_name .. "]...")
+			break
+    	end
+	end
+end
+

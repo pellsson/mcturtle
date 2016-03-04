@@ -1,4 +1,5 @@
 startup
+global
 internet
 inetnode
 findnode
@@ -6,3 +7,4 @@ move
 test
 utils
 ping
+settask

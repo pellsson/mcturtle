@@ -1,11 +1,9 @@
-os.loadAPI("internet")
+os.loadAPI("global")
 
 if false == internet.connect() then
 	print("Failed to initialize internet")
 	return
 end
-
-print("Computer id: " .. tostring(os.getComputerID()))
 
 local from, data = internet.receive(nil)
 print("From " .. from .. " to me:")
