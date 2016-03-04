@@ -7,13 +7,9 @@ end
 
 print("Computer id: " .. tostring(os.getComputerID()))
 
-while true do
-	local from, data = internet.receive(nil)
-	if nil ~= data then
-		print("From " .. from .. " to me:")
-		print(data)
-	end
-end
+local from, data = internet.receive(nil)
+print("From " .. from .. " to me:")
+print(data)
 
 internet.disconnect()
 

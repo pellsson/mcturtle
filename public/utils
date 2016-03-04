@@ -11,3 +11,14 @@ function tokenize(inp, delimiter)
 	end
 	return t
 end
+
+function ternary(cond, a, b)
+	if cond then
+		return a
+	end
+	return b
+end
+
+function current_ticks()
+	return (os.time() * 1000 + 18000) % 24000
+end

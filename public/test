@@ -1,10 +1,23 @@
 os.loadAPI("internet")
 os.loadAPI("move")
-os.loadAPI("move")
+os.loadAPI("utils")
 
+internet.connect()
+print("reading")
+--internet.receive(5)
+print("done!")
+for i=1, 10 do
+	print(tostring(utils.ticks()))
+	print(tostring(utils.ticks()))
+end
+os.sleep(1)
+print(tostring(utils.ticks()))
 -- move.initialize()
+-- move.goto(259, 6, 182, move.EAST)
+
 -- move._refuel()
-move.initialize()
-move.goto(256, 5, 178, 3)
-move.dump_pos()
+--move.initialize()
+--move.forward('attack,dig')
+--move.goto(256, 5, 178, 3)
+--move.dump_pos()
 

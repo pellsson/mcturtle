@@ -1,13 +1,43 @@
-local SOUTH	= 0
-local WEST	= 1
-local NORTH	= 2
-local EAST	= 3
+os.loadAPI("utils")
+
+SOUTH	= 0
+WEST	= 1
+NORTH	= 2
+EAST	= 3
 local wt	= {}	-- world table
 local at	= wt	-- active table
 local _fuel_items = { "minecraft:coal", "IC2:item.itemScrap", "Railcraft:fuel.coke", "Forestry:peat", "minecraft:lava_bucket" }
 
-function _w_forward()
+function _w_fatal(s)
+	while true do
+		print("Fatal! " .. s)
+		os.sleep(10)
+	end
+end
+
+function _w_do_actions(actions, sufix)
+	if not actions then
+		return
+	end
+	local a = utils.tokenize(actions, ',')
+	for i=1, #a do
+		turtle[a[i] .. sufix]()
+	end
+end
+
+function _w_forward(actions)
+	_w_do_actions(actions, '')
 	return turtle.forward()
+end
+
+function _w_up(actions)
+	_w_do_actions(actions, 'Up')
+	return turtle.up()
+end
+
+function _w_down(actions)
+	_w_do_actions(actions, 'Down')
+	return turtle.down()
 end
 
 function _w_turn_right()
@@ -18,17 +48,9 @@ function _w_turn_left()
 	return turtle.turnLeft()
 end
 
-function _w_up()
-	return turtle.up()
-end
+function _forward(actions)
 
-function _w_down()
-	return turtle.down()
-end
-
-function _forward()
-
-	if not at.forward() then
+	if not at.forward(actions) then
 		return false
 	end
 
@@ -79,8 +101,8 @@ function _turn_right()
 	return true
 end
 
-function _up()
-	if not at.up() then
+function _up(actions)
+	if not at.up(actions) then
 		return false
 	end
 	at.y = at.y + 1
@@ -88,8 +110,8 @@ function _up()
 	return true
 end
 
-function _down()
-	if not at.down() then
+function _down(actions)
+	if not at.down(actions) then
 		return false
 	end
 	at.y = at.y - 1
@@ -155,157 +177,262 @@ function _force_refuel()
 	end
 end
 
-function _try_move(movement, action)
+MOVE_OK			= 1
+MOVE_NO_FUEL	= 2
+MOVE_BLOCKED	= 3
+MOVE_USER_ABORT	= 4
+
+function _try_move(movement, actions)
+	if at.on_pre_move and not at.on_pre_move() then
+		return MOVE_USER_ABORT
+	end
+
 	if not _refuel() then
-		return false
+		if at.on_no_fuel and not at.on_no_fuel() then
+			return MOVE_USER_ABORT
+		end
+		return MOVE_NO_FUEL
 	end
-	if action then
-		action()
+
+	if not movement(actions) then
+		if at.on_blocked and not at.on_blocked() then
+			return MOVE_USER_ABORT
+		end
+		return MOVE_BLOCKED
 	end
-	return movement()
+	return MOVE_OK
 end
 
-function _force_move(movement, action)
-	while not _try_move(movement, action) do
-		if _out_of_fuel() then
+function _move(movement, actions)
+	local rc = nil
+	while MOVE_OK ~= rc do
+		rc = _try_move(movement, actions)
+		if MOVE_USER_ABORT == rc then
+			return false
+		elseif MOVE_NO_FUEL == rc then
 			_force_refuel()
-		else
-			print("Help! Im blocked")
+		elseif MOVE_BLOCKED == rc then
+			print("Help! I am blocked")
 			os.sleep(2)
 		end
 	end
+	return true
+end
+
+function _goto_over(dir, actions)
+	local rc = _try_move(dir, actions)
+	if MOVE_USER_ABORT == rc then
+		return true, false
+	end
+	return false, (MOVE_OK == rc)
 end
 
 function _goto_forward(key, to)
 	local y = 0
+	local blocked = false
 	while at[key] ~= to do
-		if not _try_move(_forward, action) then
-			if _out_of_fuel() then
-				_force_refuel()
-			else
-				if 0 == y then
-					if _try_move(_up, action) then
-						y = 1
-					elseif _try_move(_down, action) then
+		if blocked then
+			turtle.dig()
+		end
+
+		local rc = _try_move(_forward, actions)
+
+		if MOVE_USER_ABORT == rc then
+			return false
+		elseif MOVE_NO_FUEL == rc then
+			_force_refuel()
+		elseif MOVE_BLOCKED == rc then
+			if 0 == y then
+				local aborted, moved = _goto_over(_up, actions)
+				if aborted then
+					return false
+				elseif moved then
+					y = 1
+				else
+					aborted, moved = _goto_over(_down, actions)
+					if aborted then
+						return false
+					elseif moved then
 						y = -1
 					else
-						print("Help, Im blocked (goto " .. key .. ")!")
-						os.sleep(2)
-					end
-				elseif y > 0 then
-					if _try_move(_up, action) then
-						print("Help, Im blocked (goto " .. key .. ")!")
-						os.sleep(2)
-					end
-				else
-					if _try_move(_down, action) then
-						print("Help, Im blocked (goto " .. key .. ")!")
-						os.sleep(2)
+						blocked = true
 					end
 				end
+				if 0 ~= y then
+					blocked = false
+				end
+			else
+				local func = utils.ternary(y > 0, _up, _down)
+				local aborted, moved = _goto_over(func, actions)
+				if aborted then
+					return false
+				end
+				if not moved then
+					print("Halp! I am blocked (goto)")
+					os.sleep(2)
+				end
+				blocked = not moved
 			end
-		else
+		elseif MOVE_OK then
 			y = 0
+			blocked = false
+		else
+			at.fatal("Wat?")
 		end
 	end
+
+	return true
 end
 
-function _goto_x(dx, action)
+function _goto_x(dx, actions)
 	if at.x == dx then
-		return
+		return true
 	end
-	print(tostring(at.x) .. " vs " .. tostring(dx))
 	if at.x < dx then
-		face(EAST)
+		if not face(EAST) then
+			return false
+		end
 	else
-		face(WEST)
+		if not face(WEST) then
+			return false
+		end
 	end
-	_goto_forward('x', dx)
+	return _goto_forward('x', dx)
 end
 
-function _goto_z(dz, action)
+function _goto_z(dz, actions)
 	if at.z == dz then
-		return
+		return true
 	end
 	if at.z < dz then
-		face(SOUTH)
+		if not face(SOUTH) then
+			return false
+		end
 	else
-		face(NORTH)
-	end
-	_goto_forward('z', dz)
-end
-
-function _goto_y(dy, action)
-	while at.y ~= dy do
-		if at.y < dy then
-			_force_move(_up, action)
-		else
-			_force_move(_down, action)
+		if not face(NORTH) then
+			return false
 		end
 	end
+	return _goto_forward('z', dz)
 end
 
-function goto(x, y, z, dir, action)
-	_goto_x(x, action)
-	_goto_z(z, action)
-	_goto_y(y, action)
-	face(dir)
+function _goto_y(dy, actions)
+	local func = utils.ternary(at.y < dy, _up, _down)
+	local dig = utils.ternary(at.y < dy, "digUp", "digDown")
+	while at.y ~= dy do
+		turtle[dig]()
+		local rc = _try_move(func, actions)
+		if MOVE_USER_ABORT == rc then
+			return false
+		elseif MOVE_NO_FUEL == rc then
+			_force_refuel()
+		elseif MOVE_BLOCKED == rc then
+			print("Halp, I blocked going up or down")
+			os.sleep(2)
+		end
+	end
+	return true
 end
 
-function turn_around()
-	_force_move(_turn_right, nil)
-	_force_move(_turn_right, nil)
+function goto(x, y, z, dir, actions)
+	return _goto_x(x, actions) and _goto_z(z, actions) and _goto_y(y, actions) and face(dir)
+end
+
+function turn_around(actions)
+	return _move(_turn_right, nil) and _move(_turn_right, nil)
 end
 
 function turn_right()
-	_force_move(_turn_right, nil)
+	return _move(_turn_right, nil)
 end
 
 function turn_left()
-	_force_move(_turn_left, nil)
+	return _move(_turn_left, nil)
 end
 
-function forward()
-	_force_move(_forward, nil)
+function forward(actions)
+	return _move(_forward, actions)
+end
+
+function up(actions)
+	return _move(_up, actions)
+end
+
+function down(actions)
+	return _move(_down, actions)
 end
 
 function face(d)
 	if d == at.dir then
-		return
+		return true
 	end
 	if NORTH == at.dir then
 		if SOUTH == d then
-			turn_around()
+			return turn_around()
 		elseif WEST == d then
-			turn_left()
+			return turn_left()
 		elseif EAST == d then
-			turn_right()
+			return turn_right()
 		end
 	elseif SOUTH == at.dir then
 		if NORTH == d then
-			turn_around()
+			return turn_around()
 		elseif WEST == d then
-			turn_right()
+			return turn_right()
 		elseif EAST == d then
-			turn_left()
+			return turn_left()
 		end
 	elseif WEST == at.dir then
 		if EAST == d then
-			turn_around()
+			return turn_around()
 		elseif NORTH == d then
-			turn_right()
+			return turn_right()
 		elseif SOUTH == d then
-			turn_left()
+			return turn_left()
 		end
 	elseif EAST == at.dir then
 		if WEST == d then
-			turn_around()
+			return turn_around()
 		elseif NORTH == d then
-			turn_left()
+			return turn_left()
 		elseif SOUTH == d then
-			turn_right()
+			return turn_right()
 		end
 	end
+	at.on_fatal("Impossible condition in face()")
+end
+
+function get_x()
+	return at.x
+end
+
+function get_y()
+	return at.y
+end
+
+function get_z()
+	return at.z
+end
+
+function get_dir()
+	return at.dir
+end
+
+function get_pos()
+	return at.x, at.y, at.z, at.dir
+end
+
+function get_opposite_dir()
+	if EAST == at.dir then
+		return WEST
+	elseif WEST == at.dir then
+		return EAST
+	elseif NORTH == at.dir then
+		return SOUTH
+	elseif SOUTH == at.dir then
+		return NORTH
+	end
+	at.on_fatal("Wat? where are we facing lol...")
 end
 
 function dump_pos()
@@ -328,6 +455,10 @@ function initialize()
 	wt["turn_left"]		= _w_turn_left
 	wt["up"]			= _w_up
 	wt["down"]			= _w_down
+	wt["on_no_fuel"]	= nil
+	wt["on_blocked"]	= nil
+	wt["on_pre_move"]	= nil
+	wt["on_fatal"]		= _w_fatal
 	wt["save_pos"]		= _w_save_pos
 
 	wt.save_pos()

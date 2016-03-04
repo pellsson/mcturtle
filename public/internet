@@ -26,7 +26,7 @@ function update_nodes()
 end
 
 function sync_nodes()
-	local done = os.clock() + 3
+	local done = os.clock() + 2
 	force_update_nodes()
 	while os.clock() < done do
 		receive(1)
@@ -129,7 +129,7 @@ function has_seen_before(from, seq)
 	return false
 end
 
-function receive(timeout)
+function inner_receive(timeout)
 	local cid = _get_id()
 	update_nodes()
 
@@ -174,11 +174,95 @@ function receive(timeout)
 	return from, payload
 end
 
+function internal_packet(from, payload)
+	if 'ping' == payload then
+		send(from, 'pong' .. ':' .. device_name .. ':' .. tostring(utils.current_ticks()))
+		return true
+	end
+	return false
+end
+
+function receive(timeout)
+	if timeout then
+		timeout = tonumber(timeout)
+	end
+
+	local time_start = os.clock()
+	local timeout_at = utils.ternary(timeout, os.clock(), nil)
+
+	while true do
+		local from, payload = inner_receive(timeout)
+		if nil == from then
+			if timeout_at and timeout_at < os.clock() then
+				return nil
+			end
+		else
+			if not internal_packet(from, payload) then
+				return from, payload
+			end
+		end
+
+		if timeout then
+			timeout = timeout - (os.clock() - time_start)
+			if timeout < 0 then
+				timeout = 0
+			end
+		end
+	end
+end
+
 function send(to, message)
 	update_nodes()
 	_inner_send(tostring(to), { _get_id() }, tostring(next_seq), message)
 	next_seq = next_seq + 1
 end
 
+function parse_pong(data)
+	local name, ticks = data:match("pong:(.+):([0-9]+)")
+	if name then
+		return { name = name, ticks = tonumber(ticks) }
+	end
+	return nil
+end
+
+function send_ping(to, timeout)
+	local replies = {}
+	if nil == timeout then
+		timeout = 5
+	else
+		timeout = tonumber(timeout)
+	end
+
+	local start = os.clock()
+	local sent_at = utils.current_ticks()
+	internet.send(to, "ping")
+
+	while true do
+		local from, payload = receive(timeout)
+		if from then
+			local ping_data = parse_pong(payload)
+
+			if ping_data then
+				ping_data.ticks = (ping_data.ticks - sent_at)
+				table.insert(replies, ping_data)
+
+				if from and '*' ~= from then
+					return replies
+				end
+			end
+		end
+		timeout = timeout - (os.clock() - start)
+		if timeout < 0 then
+			break
+		end
+	end
+
+	return replies
+end
+
 --internet_register(get_device_name())
+
+
+
+
 
