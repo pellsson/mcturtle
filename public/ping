@@ -1,0 +1,21 @@
+os.loadAPI("internet")
+os.loadAPI("utils")
+
+args = { ... }
+
+if 0 == #args then
+	print("Usage: ping <hostname|*> [timeout]")
+	return
+end
+
+internet.connect()
+print("Sending ping...")
+local replies = internet.send_ping(args[1], args[2])
+
+print("Replies:")
+for i=1, #replies do
+	print(replies[i].name .. " (" .. tostring(replies[i].ticks) .. ") ticks")
+end
+
+
+
