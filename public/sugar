@@ -1,0 +1,22 @@
+while true do
+	local nag = false
+	while not rs.getInput("back") do
+		if not nag then
+			print("System turned off!")
+			nag = true
+		end
+		os.sleep(5)
+	end
+
+	if nag then
+		print("System re-activated!")
+	end
+
+	rs.setOutput("right", true)
+	rs.setOutput("left", true)
+	os.sleep(0.5)
+	rs.setOutput("right", false)
+	rs.setOutput("left", false)
+	os.sleep(10)
+end
+

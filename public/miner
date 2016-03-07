@@ -1,0 +1,103 @@
+os.loadAPI('global')
+
+local args = { ... }
+
+if 3 ~= #args then
+	print("Usage: miner <width> <height> <depth>")
+	return
+end
+
+local w = tonumber(args[1])
+local h = tonumber(args[2])
+local d = tonumber(args[3])
+
+local mine_x = 0
+local mine_y = 0
+local mine_z = 0
+local mine_dir = 0
+local return_to = {}
+
+function mine_initialize()
+	local fp = fs.open('.mine', 'r')
+
+	if fp then
+		mine_x = tonumber(fp.readLine())
+		mine_y = tonumber(fp.readLine())
+		mine_z = tonumber(fp.readLine())
+		mine_dir = tonumber(fp.readLine())
+		print("Using existing mine configuration: ")
+	else
+		mine_x = move.get_x()
+		mine_y = move.get_y()
+		mine_z = move.get_z()
+		mine_dir = move.get_dir()
+
+		fp = fs.open('.mine', 'w')
+		if not fp then
+			return false
+		end
+
+		fp.writeLine(tostring(mine_x))
+		fp.writeLine(tostring(mine_y))
+		fp.writeLine(tostring(mine_z))
+		fp.writeLine(tostring(mine_dir))
+		print("Creating new mine at:")
+	end
+
+	print("(" .. tostring(mine_x) .. ", " .. tostring(mine_y) .. ", " .. tostring(mine_z) .. " " .. tostring(mine_dir) .. ")")
+	fp.close()
+	return true
+end
+
+function miner_pre_move()
+	return utils.has_free_slot()
+end
+
+if not mine_initialize() then
+	print('Failed to create/load mine...')
+	return
+end
+
+if false == move.goto(mine_x, mine_y, mine_z, mine_dir, 'dig') then
+	print('Failed to return to mine...')
+	return
+end
+
+local resume = false
+local done = false
+
+while not done do
+	move.forward()
+	move.set_on_pre_move(miner_pre_move)
+
+	if not resume then
+		done = construction.dig_cube(w, h, d)
+	else
+		done = construction.dig_cube_resume()
+	end
+
+	return_to = move.get_pos_arr()
+
+	if not done and utils.has_free_slot() then
+		utils.fatal('Failed to dig for whatever reason...')
+	end
+
+	move.set_on_pre_move(nil)
+	if not move.goto(mine_x, mine_y, mine_z, move.get_opposite_dir_of(mine_dir), 'dig') then
+		utils.fatal('Failed to go to mine...')
+	end
+
+	if not utils.smart_unload() then
+		utils.fatal('Failed to off-load')
+	end
+
+	if not move.turn_around() then
+		utils.fatal('Couldnt return to mine-start')	
+	end
+
+	resume = true
+end
+
+print('* Beep beep - Mine depleted. Angh.')
+fs.delete('.mine')
+

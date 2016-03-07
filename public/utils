@@ -54,3 +54,73 @@ function get_task_name()
 	return get_task_array()[1]
 end
 
+function log(s)
+	local fp = fs.open("log.out", "a")
+
+	if fp then
+		fp.writeLine(s)
+		fp.close()
+	end
+
+	print(s)
+end
+
+function fatal(s)
+	print("Fatal! " .. s)
+	while true do
+		os.sleep(100)
+	end
+end
+
+function has_free_slot()
+	for i=1, 16 do
+		if 0 == turtle.getItemCount(i) then
+			return true
+		end
+	end
+	return false
+end
+
+function slot_fuel_value(slot)
+	local data = turtle.getItemDetail(slot)
+	if not data then
+		return 0
+	end
+	if data.name == 'minecraft:coal' then
+		return 80 * turtle.getItemCount(slot)
+	elseif data.name == 'IC2:item.itemScrap' then
+		return 15 * turtle.getItemCount(slot)
+	elseif data.name == 'Railcraft:fuel.coke' then
+		return 320 * turtle.getItemCount(slot)
+	elseif data.name == 'minecraft:stick' then
+		return 5 * turtle.getItemCount(slot)
+	end
+	return 0
+end
+
+function smart_unload(fuelcells, dirstr)
+	local cells = {}
+	if not dirstr then
+		dirstr = ''
+	end
+	for i=1, 16 do
+		local fv = slot_fuel_value(i)
+		if fv then
+			table.insert(cells, { fuelvalue = fv, slot = i })
+		end
+	end
+
+	table.sort(cells, function(a, b) return a.fuelvalue > b.fuelvalue end)
+
+	for i=1, 16 do
+		if i ~= fuelslot then
+			turtle.select(i)
+			turtle['drop' .. dirstr]()
+		end
+	end
+
+	return true
+end
+
+
+

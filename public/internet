@@ -1,6 +1,6 @@
 local hostname = ""
 local nodes = {}
-local node_update = 0.0
+local node_update = 0
 local seen_seq = {}
 local next_seq = 0
 local SYNC_INTERVAL = 5
@@ -10,7 +10,8 @@ function _get_id()
 end
 
 function _register_node(id, name)
-	nodes[tostring(id)] = { name = name, drop_at = os.clock() + (SYNC_INTERVAL * 2) }
+	-- utils.log("Learned: " .. name .. " at " .. tostring(os.clock()))
+	nodes[tostring(id)] = { name = name, drop_at = os.clock() + (SYNC_INTERVAL + 1) }
 end
 
 function force_update_nodes()
@@ -27,10 +28,12 @@ function update_nodes()
 	end
 
 	for i=1, #forgotten do
+		-- utils.log("Forgetting node " .. forgotten[i])
 		nodes[forgotten[i]] = nil
 	end
 
-	if force_update or node_update < os.clock() then
+	if node_update <= os.clock() then
+		-- utils.log("Sending node update at " .. tostring(os.clock()))
 		force_update_nodes()
 	end
 end
@@ -110,10 +113,6 @@ function disconnect()
 	rednet.unhost("internet", hostname)
 end
 
-function forget_node(node)
-	nodes[node] = nil
-end
-
 function local_node_ids()
 	local ret = {}
 	for k, v in pairs(nodes) do
@@ -131,7 +130,7 @@ function local_nodes()
 end
 
 function knows_id(id)
-	return nil ~= nodes[id]
+	return nil ~= nodes[tostring(id)]
 end
 
 function find_local_by_name(name)
@@ -148,8 +147,10 @@ function _inner_send(to, passed, seq, message)
 	local cid = _get_id()
 
 	if knows_target then
-		-- print('I know ' .. tostring(knows_target) .. ' directly')
+		-- utils.log('I know ' .. tostring(knows_target) .. ' directly')
+		-- utils.log('Sending: ' .. to .. ',' .. passed[1] .. ':' .. seq .. '|' .. message)
 		rednet.send(tonumber(knows_target), to .. ',' .. passed[1] .. ':' .. seq .. '|' .. message, "internet")
+		return
 	end
 
 	local all = local_node_ids()
@@ -173,17 +174,18 @@ function _inner_send(to, passed, seq, message)
 	end
 
 	if 0 == #send_to then
+		-- utils.log("No more targets")
 		return
 	end
 
-	-- print('Target: ' .. to)
+	-- utils.log('Target: ' .. to)
 
 	for i=1, #passed do
 		raw = raw .. tostring(passed[i]) .. ','
 	end
 	raw = raw .. ':' .. seq .. '|' .. message
 	for i=1, #send_to do
-		-- print('Forwarding to "' .. send_to[i] .. "'")
+		-- utils.log('Forwarding to "' .. send_to[i] .. "'")
 		rednet.send(tonumber(send_to[i]), raw, "internet")
 	end
 end
@@ -204,19 +206,21 @@ function inner_receive(timeout)
 		return nil
 	end
 
+	-- utils.log(message)
+
 	local header, payload = message:match("([^|]+)|(.*)")
 
 	if '?' == header then
-		-- print("Sync request from  " .. sender)
+		-- utils.log("Sync request from  " .. sender)
 		_register_node(sender, payload)
 		rednet.send(sender, "!|" .. hostname, "internet")
 		return nil
 	elseif '!' == header then
-		-- print("Sync reply from " .. sender .. " as " .. payload)
+		-- utils.log("Sync reply from " .. sender .. " as " .. payload)
 		_register_node(sender, payload)
 		return nil
 	elseif not knows_id(sender) then
-		-- print("Got message from unknown computer: " .. tostring(sender))
+		-- utils.log("Got message from unknown computer: " .. tostring(sender))
 		rednet.send(sender, "?|" .. hostname, "internet")
 	end
 
@@ -227,11 +231,13 @@ function inner_receive(timeout)
 	local to = passed[1]
 	local from = passed[2]
 
+	-- utils.log("From " .. tostring(sender) .. ' ' .. from .. '->' .. to)
+
 	if has_seen_before(from, seq) then
+		-- utils.log("Seen before <.<")
 		return nil
 	end
 
-	-- print(from .. '->' .. to .. ": " .. payload)
 	if to == cid or to == hostname then
 		return from, payload
 	end
@@ -252,7 +258,7 @@ function internal_packet(from, payload)
 		send(from, 'pong' .. ':' .. _get_id() .. ':' .. hostname .. ':' .. pos .. ':' .. utils.get_task_name() .. ':' .. tostring(utils.current_ticks()))
 		return true
 	elseif 'reboot' == payload then
-		print("Internet reboot request!")
+		utils.log("Internet reboot request!")
 		os.sleep(0.5)
 		os.reboot()
 	end
@@ -260,31 +266,39 @@ function internal_packet(from, payload)
 end
 
 function receive(timeout)
+	local timeout_at = nil
+	local wait_for  = 0
+
 	if timeout then
 		timeout = tonumber(timeout)
+		timeout_at = os.clock() + timeout
 	end
 
-	local wait_for = utils.ternary(timeout, timeout, SYNC_INTERVAL)
 	local time_start = os.clock()
-	local timeout_at = utils.ternary(timeout, os.clock(), nil)
+	 utils.ternary(timeout, os.clock(), nil)
 
 	while true do
+		local now = os.clock()
 		update_nodes()
+
+		if timeout_at then
+			wait_for = utils.ternary(timeout_at > now, timeout_at - now, SYNC_INTERVAL)
+		else
+			wait_for = SYNC_INTERVAL
+		end
+
+		if (now + wait_for) > node_update then
+			wait_for = utils.ternary(node_update > now, node_update - now, 0)
+		end
+
 		local from, payload = inner_receive(wait_for)
 		if nil == from then
-			if timeout_at and timeout_at < os.clock() then
+			if timeout_at and timeout_at <= os.clock() then
 				return nil
 			end
 		else
 			if not internal_packet(from, payload) then
 				return from, payload
-			end
-		end
-
-		if timeout then
-			timeout = timeout - (os.clock() - time_start)
-			if timeout < 0 then
-				timeout = 0
 			end
 		end
 	end
@@ -298,7 +312,7 @@ end
 
 function parse_pong(data)
 	local id, name, x, y, z, dir, task, ticks = data:match("pong:(.+):(.+):(.+):(.+):(.+):(.+):(.+):(.+)")
-	if name then
+	if id then
 		return {
 			id = tonumber(id),
 			name = name,

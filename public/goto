@@ -1,0 +1,15 @@
+os.loadAPI("global")
+args = { ... }
+
+if #args < 3 then
+	print("Usage: goto <x> <y> <z> [dir] [actions]")
+	return
+end
+
+local dir = utils.ternary(args[4], tonumber(args[4]), nil)
+
+if move.goto(tonumber(args[1]), tonumber(args[2]), tonumber(args[3]), dir, args[5]) then
+	print("Goto successful!")
+else
+	print("Goto failed <.<")
+end

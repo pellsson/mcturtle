@@ -1,6 +1,7 @@
 os.loadAPI("utils")
 os.loadAPI("move")
 os.loadAPI("internet")
+os.loadAPI("construction")
 
 move.initialize()
 

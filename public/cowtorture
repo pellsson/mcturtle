@@ -1,0 +1,40 @@
+rs.setOutput("right", true)
+
+while true do
+	local nag = false
+	while not rs.getInput("left") do
+		if not nag then
+			print("I am turned off <.<")
+			nag = true
+		end
+		os.sleep(5)
+	end
+
+	if nag then
+		print("System re-activated!")
+	end
+
+	rs.setOutput("front", true)
+	os.sleep(0.3)
+	rs.setOutput("front", false)
+	os.sleep(0.3)
+
+	for i = 1, 9 do
+		turtle.suck()
+	end
+	for i = 1, 16 do
+		local data = turtle.getItemDetail(i)
+		--print("Item detail " .. tostring(i))
+		if data then
+			turtle.select(i)
+			if 'minecraft:milk_bucket' == data.name then
+				turtle.dropUp()
+			elseif 'minecraft:bucket' == data.name then
+				turtle.drop()
+			else
+				turtle.dropDown()
+			end
+		end
+	end
+	os.sleep(2)
+end

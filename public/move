@@ -4,26 +4,57 @@ NORTH	= 2
 EAST	= 3
 local wt	= {}	-- world table
 local at	= wt	-- active table
+local st	= {}	-- simulation table
 local _fuel_items = { "minecraft:coal", "IC2:item.itemScrap", "Railcraft:fuel.coke", "Forestry:peat", "minecraft:lava_bucket" }
 
 function _nothing()
 	return true
 end
 
-function _w_fatal(s)
-	while true do
-		print("Fatal! " .. s)
-		os.sleep(10)
-	end
+function _s_forward(actions)
+	return true
 end
 
-function _w_do_actions(actions, sufix)
+function _s_up(actions)
+	return true
+end
+
+function _s_down(actions)
+	return true
+end
+
+function _s_turn_right()
+	return true
+end
+
+function _s_turn_left()
+	return true
+end
+
+function _s_save_pos()
+	return true
+end
+
+function _try_action(action, suffix)
+	if 'dig' == action then
+		local ok, data = turtle['inspect' .. suffix]()
+		if ok then
+			local mod = utils.tokenize(data.name, ':')[1]
+			if 'ComputerCraft' == mod then
+				return false
+			end
+		end
+	end
+	return turtle[action .. suffix]()
+end
+
+function _w_do_actions(actions, suffix)
 	if not actions then
 		return
 	end
 	local a = utils.tokenize(actions, ',')
 	for i=1, #a do
-		turtle[a[i] .. sufix]()
+		_try_action(a[i], suffix)
 	end
 end
 
@@ -221,65 +252,20 @@ function _move(movement, actions)
 	return true
 end
 
-function _goto_over(dir, actions)
-	local rc = _try_move(dir, actions)
-	if MOVE_USER_ABORT == rc then
-		return true, false
-	end
-	return false, (MOVE_OK == rc)
-end
-
-function _goto_forward(key, to)
-	local y = 0
-	local blocked = false
+function _goto_move(key, to, func, actions)
 	while at[key] ~= to do
-		if blocked then
-			turtle.dig()
-		end
-
-		local rc = _try_move(_forward, actions)
-
-		if MOVE_USER_ABORT == rc then
-			return false
-		elseif MOVE_NO_FUEL == rc then
-			_force_refuel()
-		elseif MOVE_BLOCKED == rc then
-			if 0 == y then
-				local aborted, moved = _goto_over(_up, actions)
-				if aborted then
-					return false
-				elseif moved then
-					y = 1
-				else
-					aborted, moved = _goto_over(_down, actions)
-					if aborted then
-						return false
-					elseif moved then
-						y = -1
-					else
-						blocked = true
-					end
-				end
-				if 0 ~= y then
-					blocked = false
-				end
+		local rc = _try_move(func, actions)
+		if MOVE_OK ~= rc then
+			if MOVE_USER_ABORT == rc then
+				return false
+			elseif MOVE_NO_FUEL == rc then
+				_force_refuel()
+			elseif MOVE_BLOCKED == rc then
+				print("Help! I am blocked")
+				os.sleep(2)
 			else
-				local func = utils.ternary(y > 0, _up, _down)
-				local aborted, moved = _goto_over(func, actions)
-				if aborted then
-					return false
-				end
-				if not moved then
-					print("Halp! I am blocked (goto)")
-					os.sleep(2)
-				end
-				blocked = not moved
+				utils.fatal("No idea whats happening...")
 			end
-		elseif MOVE_OK then
-			y = 0
-			blocked = false
-		else
-			at.fatal("Wat?")
 		end
 	end
 
@@ -299,7 +285,7 @@ function _goto_x(dx, actions)
 			return false
 		end
 	end
-	return _goto_forward('x', dx)
+	return _goto_move('x', dx, _forward, actions)
 end
 
 function _goto_z(dz, actions)
@@ -315,29 +301,19 @@ function _goto_z(dz, actions)
 			return false
 		end
 	end
-	return _goto_forward('z', dz)
+	return _goto_move('z', dz, _forward, actions)
 end
 
 function _goto_y(dy, actions)
-	local func = utils.ternary(at.y < dy, _up, _down)
-	local dig = utils.ternary(at.y < dy, "digUp", "digDown")
-	while at.y ~= dy do
-		turtle[dig]()
-		local rc = _try_move(func, actions)
-		if MOVE_USER_ABORT == rc then
-			return false
-		elseif MOVE_NO_FUEL == rc then
-			_force_refuel()
-		elseif MOVE_BLOCKED == rc then
-			print("Halp, I blocked going up or down")
-			os.sleep(2)
-		end
-	end
-	return true
+	return _goto_move('y', dy, utils.ternary(at.y < dy, _up, _down), actions)
 end
 
 function goto(x, y, z, dir, actions)
-	return _goto_x(x, actions) and _goto_z(z, actions) and _goto_y(y, actions) and face(dir)
+	return _goto_y(y, actions) and _goto_x(x, actions) and _goto_z(z, actions) and face(dir)
+end
+
+function goto_pos_arr(arr, actions)
+	return goto(arr[1], arr[2], arr[3], arr[4], actions)
 end
 
 function turn_around(actions)
@@ -364,7 +340,44 @@ function down(actions)
 	return _move(_down, actions)
 end
 
+function sideways_relative(dist, actions)
+	local dx = get_x()
+	local dz = get_z()
+	local dir = get_dir()
+
+	if NORTH == dir or SOUTH == dir then
+		dx = dx + (dist * (dir - 1))
+	else
+		dz = dz + (dist * (dir - 2))
+	end
+
+	return goto(dx, get_y(), dz, nil, actions)
+end
+
+function y_relative(y, actions)
+	return goto(get_x(), get_y() + y, get_z(), get_dir(), actions)
+end
+
+function forward_relative(dist, actions)
+	local dx = get_x()
+	local dz = get_z()
+	local dir = get_dir()
+	--
+	-- Ask gorbiiz :D
+	--
+	if WEST == dir or EAST == dir then
+		dx = dx + (dist * (dir - 2))
+	else
+		dz = dz - (dist * (dir - 1))
+	end
+
+	return goto(dx, get_y(), dz, nil, actions)
+end
+
 function face(d)
+	if nil == d then
+		return true
+	end
 	if d == at.dir then
 		return true
 	end
@@ -401,7 +414,7 @@ function face(d)
 			return turn_right()
 		end
 	end
-	at.on_fatal("Impossible condition in face()")
+	utils.fatal("Impossible condition in face()")
 end
 
 function get_x()
@@ -424,22 +437,63 @@ function get_pos()
 	return at.x, at.y, at.z, at.dir
 end
 
+function get_pos_arr()
+	return { get_pos() }
+end
+
 function get_opposite_dir()
-	if EAST == at.dir then
+	return get_opposite_dir_of(at.dir)
+end
+
+function compare_positions(a, b)
+	if 4 ~= #a or 4 ~= #b then
+		utils.fatal('Not a position array...')
+	end
+	for i=1, 4 do
+		if a[i] ~= b[i] then
+			return false
+		end
+	end
+	return true
+end
+
+function get_opposite_dir_of(dir)
+	if EAST == dir then
 		return WEST
-	elseif WEST == at.dir then
+	elseif WEST == dir then
 		return EAST
-	elseif NORTH == at.dir then
+	elseif NORTH == dir then
 		return SOUTH
-	elseif SOUTH == at.dir then
+	elseif SOUTH == dir then
 		return NORTH
 	end
-	at.on_fatal("Wat? where are we facing lol...")
+	utils.fatal("Wat? where are we facing lol...")
 end
 
 function dump_pos()
 	print("Pos: " .. tostring(at.x) .. "," .. tostring(at.y) .. "," .. tostring(at.z) .. ":" .. tostring(at.dir))
 end
+
+function set_on_pre_move(func)
+	local old = at["on_pre_move"]
+	at["on_pre_move"] = func
+	return old
+end
+
+function enter_simulation(set_world_pos)
+	if set_world_pos then
+		st['x'] = wt['x']
+		st['y'] = wt['y']
+		st['z'] = wt['z']
+		st['dir'] = wt['dir']
+	end
+	at = st
+end
+
+function enter_world()
+	at = wt
+end
+
 
 function initialize()
 	if false == _load_pos(".position") then
@@ -447,8 +501,6 @@ function initialize()
 			return false
 		end
 	end
-
-	at = wt
 
 	wt["forward"]		= _w_forward
 	wt["turn_right"]	= _w_turn_right
@@ -458,8 +510,17 @@ function initialize()
 	wt["on_no_fuel"]	= nil
 	wt["on_blocked"]	= nil
 	wt["on_pre_move"]	= nil
-	wt["on_fatal"]		= _w_fatal
 	wt["save_pos"]		= _w_save_pos
+
+	st["forward"]		= _s_forward
+	st["turn_right"]	= _s_turn_right
+	st["turn_left"]		= _s_turn_left
+	st["up"]			= _s_up
+	st["down"]			= _s_down
+	st["on_no_fuel"]	= nil
+	st["on_blocked"]	= nil
+	st["on_pre_move"]	= nil
+	st["save_pos"]		= _s_save_pos
 
 	if not turtle then
 		print("Warning, machine can't move")
@@ -475,11 +536,12 @@ function initialize()
 		wt["on_no_fuel"]	= _nothing
 		wt["on_blocked"]	= _nothing
 		wt["on_pre_move"]	= _nothing
-		wt["on_fatal"]		= _nothing
 		wt["save_pos"]		= _nothing
 	else
 		wt.save_pos()
 	end
+
+	enter_world()
 	return true
 end
 

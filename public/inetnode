@@ -5,9 +5,13 @@ if false == internet.connect() then
 	return
 end
 
-local from, data = internet.receive(nil)
-print("From " .. from .. " to me:")
-print(data)
+while true do
+	local from, data = internet.receive(nil)
+	if from then
+		print("From " .. from .. " to me:")
+		print(data)
+	end
+end
 
 internet.disconnect()
 

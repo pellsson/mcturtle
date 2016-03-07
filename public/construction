@@ -1,0 +1,155 @@
+
+function _inner_move_in_cube(width, height, depth, actions)
+	if 0 == width   then width  = 1  end
+	if 0 == height  then height = 1  end
+	if 0 == depth   then depth  = 1  end
+
+	if height > 0 then
+		height = height - 1
+	end
+
+	if move.get_y() + height < 5 then
+		height = (move.get_y() - 5) * -1
+	elseif move.get_y() + height > 254 then
+		height = (254 - move.get_y())
+	end
+  
+	abs_depth   = math.abs(depth)
+	abs_width   = math.abs(width)
+	abs_height  = math.abs(height)
+
+	if abs_width > abs_depth then
+		if width < 0 then
+			if not move.turn_left() then
+				return false
+			end
+		else
+			if not move.turn_right() then 
+				return false
+			end
+			width = width * -1
+		end
+
+		local temp  = depth
+
+		depth       = width
+		width       = temp
+
+		abs_depth   = math.abs(depth)
+		abs_width   = math.abs(width)
+	else
+		if depth < 0 then
+			if not move.turn_around() then
+				return false
+			end
+			width = width * -1
+		end
+	end
+
+	local speed_width = 1
+  
+	if width < 0 then
+		speed_width = -1
+	end
+
+	abs_width = abs_width - 1
+	abs_depth = abs_depth - 1
+  
+	--
+	-- Assume first-time values
+	--
+	local next_height   = height
+	local current_width = 0
+
+	while true do
+		--
+		-- Do one "depth"
+		--
+		for i = 1, abs_depth do
+			if not move.y_relative(next_height, actions) then
+				return false
+			end
+
+			if not move.forward_relative(1, actions) then
+				return false
+			end
+
+			next_height = next_height * -1
+		end
+
+		if not move.y_relative(next_height, actions) then
+			return false
+		end
+
+		next_height = next_height * -1
+		
+		if current_width == abs_width then
+			break
+		end
+		
+		--
+		-- Done with depth, go one widthz
+		--
+		local next_dir = move.get_opposite_dir()
+
+		if not move.sideways_relative(speed_width, actions) then
+			return false
+		end
+
+		if not move.face(next_dir) then
+			return false
+		end
+		
+		--
+		-- Reset
+		--
+		speed_width   = speed_width * -1
+		current_width = current_width + 1
+	end
+  
+	return true
+end
+
+local resume_from = nil
+local r_width = 0
+local r_height = 0
+local r_depth = 0
+
+function _move_in_cube(width, height, depth)
+	local rc = _inner_move_in_cube(width, height, depth, 'dig')
+	if not rc then
+		resume_from = move.get_pos_arr()
+	else
+		resume_from = nil
+	end
+	return rc
+end
+function dig_cube(width, height, depth)
+	r_width		= width
+	r_height	= height
+	r_depth		= depth
+	return _move_in_cube(width, height, depth)
+end
+
+function _return_pre_step()
+	if move.compare_positions(resume_from, move.get_pos_arr()) then
+		move.enter_world()
+		if not move.goto_pos_arr(resume_from, 'dig') then
+			utils.fatal('Failed to return to resume position')
+		end
+		resume_from = nil
+	end
+	return true
+end
+
+function dig_cube_resume()
+	if nil == resume_from then
+		utils.fatal('Cant resume from this state...')
+	end
+
+	move.enter_simulation(true)
+	move.set_on_pre_move(_return_pre_step)
+
+	return _move_in_cube(r_width, r_height, r_depth)
+end
+
