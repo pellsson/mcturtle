@@ -193,10 +193,12 @@ function _refuel()
 	end
 	local old = turtle.getSelectedSlot()
 	for i=1, 16 do
-		turtle.select(i)
-		if turtle.refuel(1) and turtle.getFuelLevel() > 0 then
-			success = true
-			break
+		if 0 ~= utils.slot_fuel_value(i) then
+			turtle.select(i)
+			if turtle.refuel(1) and turtle.getFuelLevel() > 0 then
+				success = true
+				break
+			end
 		end
 	end
 	turtle.select(old)

@@ -1,0 +1,195 @@
+os.loadAPI('global')
+
+function unload_cargo()
+
+	move.turn_around()
+	--
+	-- Drop all crap
+	--
+	local crafting_logs = utils.biggest_stack_of('minecraft:log')
+	local keep_fuel = 64 * 5 * 4 -- 4 stacks of sticks
+	utils.smart_unload_exclude({ utils.biggest_stack_of('minecraft:sapling'), crafting_logs },
+		keep_fuel)
+
+	local sticks = utils.stacks_of('minecraft:stick')
+	local craft_stacks = 4 - sticks
+
+	if craft_stacks > 0 then
+		move.turn_left()
+		--
+		-- Drop the logs down, and drop everything else infront
+		--
+		utils.unload_type('minecraft:log', 'Down')
+		utils.unload_all()
+
+		print("Crafting new fuel stacks: " .. tostring(craft_stacks))
+
+		for i=1, craft_stacks do
+			turtle.select(1)
+			turtle.suckDown(8)
+			turtle.craft()
+			turtle.transferTo(5, 16)
+			turtle.craft()
+			utils.unload_all()
+		end
+		--
+		-- Move all trees to storage chest
+		--
+		while turtle.suck() do
+		end
+		--
+		-- Drop remaining wood
+		--
+		move.turn_right()
+		turtle.select(16)
+		turtle.suckDown()
+		turtle.drop()
+	end
+
+	move.turn_around()
+end
+
+local args = { ... }
+
+if 1 ~= #args then
+	print("Usage: forester <size>")
+	return
+end
+
+local size = tonumber(args[1])
+
+if (0 == size) or (0 ~= (size % 2)) then
+	print("Size must be dividable by 2 (shitty code)")
+	return
+end
+
+print("Creating forest with size: " .. tostring(size))
+
+function place_sapling()
+	while not utils.select_by_name('minecraft:sapling') do
+		-- move.goto(..)
+		print('FIX ME: Need saplings')
+		os.sleep(3)
+	end
+	turtle.placeDown()
+end
+
+local speed_side = 3
+
+function is_log(name)
+	return (name == 'minecraft:log')
+end
+
+function is_leaf(name)
+	return (name == 'minecraft:leaves')
+end
+
+function kill_tree_inner()
+	local v = 1
+	
+	for v=1, 4 do
+		local rc, obj = turtle.inspect()
+		if rc then
+			if is_log(obj.name) then
+				local resume_from = move.get_pos_arr()
+
+				turtle.suck()
+				move.forward('dig')
+				kill_tree()
+
+				move.goto_pos_arr(resume_from)
+			elseif is_leaf(obj.name) then
+				turtle.dig() -- try for sapling
+			end
+		end
+
+		move.turn_left()
+	end
+
+	rc, obj = turtle.inspectUp()
+
+	if rc then
+		if is_log(obj.name) or is_leaf(obj.name) then
+			move.up('dig')
+			kill_tree()
+		end
+	end
+end
+
+function kill_tree()
+	local resume_from = move.get_pos_arr()
+	kill_tree_inner()
+	move.goto_pos_arr(resume_from)
+end
+
+function wait_and_replant()
+	print("Waiting for tree to grow... Fun <.<")
+
+	local count = 0
+
+	while true do
+		local grown, obj = turtle.inspect()
+		if not grown then
+			print('Nothing here, replanting')
+			break
+		end
+		if obj.name == 'minecraft:log' then
+			print("Forest has grown!")
+			kill_tree()
+			break
+		end
+		os.sleep(1)
+		count = count + 1
+		if count == 15 then
+			print("Tree is taking to long, skipping...")
+			break
+		end
+	end
+
+	move.up('dig')
+	move_forward()
+	place_sapling()
+	move_forward()
+	move.down('dig')
+end
+
+function move_forward()
+	move.forward('dig')
+	turtle.suckDown()
+	turtle.suck()
+end
+
+local done = false
+local home = move.get_pos_arr()
+
+home[2] = home[2] + 1 -- y ;)
+
+local side = speed_side
+
+while not done do
+	for y=1, size do
+		for x=1, size do
+			wait_and_replant()
+			move_forward()
+		end
+
+		if y ~= size then
+			local next_dir = move.get_opposite_dir()
+			move.sideways_relative(side, 'dig')
+			move.face(next_dir)
+			move_forward()
+
+			side = side * -1
+		end
+	end
+
+	side = 3
+
+	move.goto_pos_arr(home, 'dig')
+	move.down('dig')
+
+	print("Returning home with loot")
+
+	unload_cargo()
+end
+

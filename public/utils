@@ -98,28 +98,134 @@ function slot_fuel_value(slot)
 	return 0
 end
 
-function smart_unload(fuelcells, dirstr)
-	local cells = {}
+function select_by_name(name)
+	for i=1, 16 do
+		data = turtle.getItemDetail(i)
+		if data then
+			if data.name == name then
+				turtle.select(i)
+				return true
+			end
+		end
+	end
+	return false
+end
+
+function is_slot_name(slot, name)
+	local data = turtle.getItemDetail(slot)
+	if data then
+		return (data.name == name)
+	end
+	return false
+end
+
+function unload_type(name, dirstr)
 	if not dirstr then
 		dirstr = ''
 	end
+
 	for i=1, 16 do
-		local fv = slot_fuel_value(i)
-		if fv then
-			table.insert(cells, { fuelvalue = fv, slot = i })
+		if is_slot_name(i, name) then
+			turtle.select(i)
+			turtle['drop' .. dirstr]()
+		end
+	end
+end
+
+function unload_all(dirstr)
+	if not dirstr then
+		dirstr = ''
+	end
+
+	for i=1, 16 do
+		if turtle.getItemCount(i) ~= 0 then
+			turtle.select(i)
+			turtle['drop' .. dirstr]()
+		end
+	end
+end
+
+function stacks_of(name)
+	local count = 0
+	for i=1, 16 do
+		if is_slot_name(i, name) then
+			count = count + 1
+		end
+	end
+	return count
+end
+
+function biggest_stack_of(name)
+	local slot = 0
+	local count = 0
+
+	for i=1, 16 do
+		if is_slot_name(i, name) then
+			if turtle.getItemCount(i) > count then
+				count = turtle.getItemCount(i)
+				slot = i
+			end
 		end
 	end
 
-	table.sort(cells, function(a, b) return a.fuelvalue > b.fuelvalue end)
+	return slot
+end
+
+function smart_unload_exclude(excluded, min_fuel, dirstr)
+	if not excluded then
+		excluded = {}
+	end
+
+	if not dirstr then
+		dirstr = ''
+	end
+
+	if not min_fuel then
+		print("not set?")
+		min_fuel = 80 * (64 * 2) -- Two stacks of coal by default
+	end
+
+	local fuel = {}
 
 	for i=1, 16 do
-		if i ~= fuelslot then
+		local fv = slot_fuel_value(i)
+		if 0 ~= fv then
+			table.insert(fuel, { fuelvalue = fv, slot = i })
+		end
+	end
+
+	table.sort(fuel, function(a, b) return a.fuelvalue > b.fuelvalue end)
+
+	local total_fuel = 0
+
+	for i=1, #fuel do
+		if total_fuel < min_fuel then
+			table.insert(excluded, fuel[i].slot)
+			total_fuel = total_fuel + fuel[i].fuelvalue
+		end
+	end
+
+	for i=1, 16 do
+		local drop = true
+
+		for e=1, #excluded do
+			if i == excluded[e] then
+				drop = false
+				break
+			end
+		end
+
+		if drop then
 			turtle.select(i)
 			turtle['drop' .. dirstr]()
 		end
 	end
 
 	return true
+end
+
+function smart_unload(min_fuel, dirstr)
+	return smart_unload_exclude({}, min_fuel, dirstr)
 end
 
 
