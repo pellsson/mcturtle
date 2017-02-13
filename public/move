@@ -482,6 +482,25 @@ function set_on_pre_move(func)
 	return old
 end
 
+local _step_counter = 0
+
+function _count_steps()
+
+end
+
+function get_distance(x, y, z, dir)
+	_step_counter = 0
+
+	local old = set_on_pre_move(_count_steps)
+
+	enter_simulation(true)
+	goto(x, y, z, dir)
+	enter_world()
+	set_on_pre_move(old)
+
+	return _step_counter
+end
+
 function enter_simulation(set_world_pos)
 	if set_world_pos then
 		st['x'] = wt['x']
